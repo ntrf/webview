@@ -6,9 +6,11 @@ if(APPLE)
 	set(WEBVIEW_COMPILE_DEFS "-DWEBVIEW_COCOA=1")
 	set(WEBVIEW_COMPILE_OPTS "-ObjC")
 	set(WEBVIEW_LIBS "-framework Cocoa" "-framework WebKit")
+	set(WEBVIEW_PLATFORM_SRC "webview_cocoa.mm")
 elseif(WIN32)
 	set(WEBVIEW_COMPILE_DEFS "-DWEBVIEW_WINAPI=1")
 	set(WEBVIEW_LIBS "ole32.lib" "comctl32.lib" "oleaut32.lib" "uuid.lib")
+	set(WEBVIEW_PLATFORM_SRC "webview_winapi.cpp")
 else()
 	set(WEBVIEW_COMPILE_DEFS "-DWEBVIEW_GTK=1")
 	find_package(PkgConfig REQUIRED)
@@ -16,9 +18,14 @@ else()
 	pkg_check_modules(WEBKIT2 REQUIRED webkit2gtk-4.0)
 	set(WEBVIEW_COMPILE_INCS ${GTK3_INCLUDE_DIRS} ${WEBKIT2_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR})
 	set(WEBVIEW_LIBS ${GTK3_LIBRARIES} ${WEBKIT2_LIBRARIES})
+	set(WEBVIEW_PLATFORM_SRC "webview_gtk.cpp")
 endif()
 
-add_library(webview ${CMAKE_CURRENT_BINARY_DIR}/webview.c webview.h)
+add_library(webview 
+	${CMAKE_CURRENT_BINARY_DIR}/webview.c
+	${WEBVIEW_PLATFORM_SRC}
+	webview.h
+)
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/webview.c "#define WEBVIEW_IMPLEMENTATION\n#include <webview.h>")
 target_include_directories(webview PUBLIC ${PROJECT_SOURCE_DIR} ${WEBVIEW_COMPILE_INCS})
 target_compile_definitions(webview PUBLIC ${WEBVIEW_COMPILE_DEFS})
