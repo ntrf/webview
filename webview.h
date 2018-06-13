@@ -54,7 +54,6 @@ extern "C" {
 		int should_exit;
 	};
 #elif defined(WEBVIEW_WINAPI)
-#define CINTERFACE
 #include <windows.h>
 
 #include <commctrl.h>
@@ -67,7 +66,7 @@ extern "C" {
 
 	struct webview_priv {
 		HWND hwnd;
-		IOleObject **browser;
+		struct WebViewClient * client;
 		BOOL is_fullscreen;
 		DWORD saved_style;
 		DWORD saved_ex_style;
