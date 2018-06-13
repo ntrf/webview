@@ -21,14 +21,14 @@ else()
 	set(WEBVIEW_PLATFORM_SRC "webview_gtk.cpp")
 endif()
 
-add_library(webview SHARED
+add_library(webview
 	webview.cpp
 	webview.h
 	${WEBVIEW_PLATFORM_SRC}
 )
 
 target_include_directories(webview PUBLIC ${WEBVIEW_COMPILE_INCS})
-target_compile_definitions(webview PUBLIC ${WEBVIEW_COMPILE_DEFS} "-DWEBVIEW_EXPORT")
+target_compile_definitions(webview PUBLIC ${WEBVIEW_COMPILE_DEFS} "-DWEBVIEW_STATIC")
 target_compile_options(webview PRIVATE ${WEBVIEW_COMPILE_OPTS})
 target_link_libraries(webview ${WEBVIEW_LIBS})
 

@@ -28,11 +28,7 @@
 extern "C" {
 #endif
 
-#ifdef WEBVIEW_STATIC
-#define WEBVIEW_API static
-#else
 #define WEBVIEW_API extern
-#endif
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -67,11 +63,13 @@ extern "C" {
 		RECT saved_rect;
 	};
 
-#undef WEBVIEW_API
-#ifdef WEBVIEW_EXPORT
-#define WEBVIEW_API __declspec(dllexport)
-#else
-#define WEBVIEW_API __declspec(dllimport)
+#ifndef WEBVIEW_STATIC
+#	undef WEBVIEW_API
+#	ifdef WEBVIEW_EXPORT
+#		define WEBVIEW_API __declspec(dllexport)
+#	else
+#		define WEBVIEW_API __declspec(dllimport)
+#	endif
 #endif
 
 #elif defined(WEBVIEW_COCOA)
@@ -94,8 +92,9 @@ extern "C" {
 
 	typedef struct webview_s webview_t;
 
-	typedef void(*webview_external_invoke_cb_t)(webview_t *w,
-		const char *arg);
+	typedef void(*webview_external_invoke_cb_t)(webview_t *w, const char * arg);
+
+	typedef void(*webview_oauth_complete_cb_t)(webview_t *w, const char * uri);
 
 	struct webview_s {
 		void *parent;
@@ -105,7 +104,9 @@ extern "C" {
 		int height;
 		int resizable;
 		int debug;
+		const char * oauth_callback_prefix;
 		webview_external_invoke_cb_t external_invoke_cb;
+		webview_oauth_complete_cb_t oauth_complete_cb;
 		struct webview_priv priv;
 		void *userdata;
 	};

@@ -10,18 +10,62 @@
 #include <shobjidl.h>
 #include <ExDispid.h>
 
+#include <string>
+
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 
 #define WM_WEBVIEW_DISPATCH (WM_APP + 1)
 
+
+#ifdef __cplusplus
+#define iid_ref(x) &(x)
+#define iid_unref(x) *(x)
+#else
+#define iid_ref(x) (x)
+#define iid_unref(x) (x)
+#endif
+
+static inline WCHAR *webview_to_utf16(const char *s) {
+	DWORD size = MultiByteToWideChar(CP_UTF8, 0, s, -1, 0, 0);
+	WCHAR *ws = (WCHAR *)GlobalAlloc(GMEM_FIXED, sizeof(WCHAR) * size);
+	if (ws == NULL) {
+		return NULL;
+	}
+	MultiByteToWideChar(CP_UTF8, 0, s, -1, ws, size);
+	return ws;
+}
+
+static inline char *webview_from_utf16(WCHAR *ws) {
+	int n = WideCharToMultiByte(CP_UTF8, 0, ws, -1, NULL, 0, NULL, NULL);
+	char *s = (char *)GlobalAlloc(GMEM_FIXED, n);
+	if (s == NULL) {
+		return NULL;
+	}
+	WideCharToMultiByte(CP_UTF8, 0, ws, -1, s, n, NULL, NULL);
+	return s;
+}
+
+static int iid_eq(REFIID a, const IID *b) {
+	return memcmp((const void *)iid_ref(a), (const void *)b, sizeof(GUID)) == 0;
+}
+
 struct WebViewEvents : public DWebBrowserEvents2
 {
+	struct WebViewClient * client;
+
 	// Inherited via DWebBrowserEvents2
 	virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void ** ppvObject) override
 	{
-		return E_NOTIMPL;
+		if (iid_eq(riid, &IID_IUnknown) || iid_eq(riid, &IID_IDispatch) || 
+			iid_eq(riid, &__uuidof(DWebBrowserEvents2))) {
+			*ppvObject = this;
+			return S_OK;
+		} else {
+			*ppvObject = NULL;
+			return E_NOINTERFACE;
+		}
 	}
 	virtual ULONG STDMETHODCALLTYPE AddRef(void) override
 	{
@@ -47,10 +91,36 @@ struct WebViewEvents : public DWebBrowserEvents2
 	{
 		switch (dispIdMember) {
 		case DISPID_BEFORENAVIGATE2:
+		{
+			VARIANTARG & va_url = pDispParams->rgvarg[5];
+			VARIANTARG & va_cancel = pDispParams->rgvarg[0];
+
+			const wchar_t * url = va_url.pvarVal->bstrVal;
+			VARIANT_BOOL * cancel = va_cancel.pboolVal;
+
+			BOOL do_cancel = false;
+			HandleURL(url, &do_cancel);
+			*cancel = do_cancel ? 1 : 0;
 			break;
 		}
+		case DISPID_NAVIGATECOMPLETE2:
+		{
+			VARIANTARG & va_url = pDispParams->rgvarg[0];
+			const wchar_t * url = va_url.pvarVal->bstrVal;
+
+			BOOL do_cancel = false;
+			HandleURL(url, &do_cancel);
+
+			break;
+		}
+		}
+
 		return S_OK;
 	}
+
+	void HandleURL(const wchar_t * url, BOOL * result);
+
+	DWORD eventConnCookie;
 };
 
 struct WebViewClient : public IOleClientSite, IOleInPlaceSite, IDocHostUIHandler
@@ -102,41 +172,14 @@ public:
 	IWebBrowser2 * webBrowser2;
 	IOleObject * browser;
 
+	std::wstring oauthPrefix;
+	std::wstring oauthResult;
+
 	HWND parentWnd;
+
+	WebViewEvents events;
 };
 
-
-#ifdef __cplusplus
-#define iid_ref(x) &(x)
-#define iid_unref(x) *(x)
-#else
-#define iid_ref(x) (x)
-#define iid_unref(x) (x)
-#endif
-
-static inline WCHAR *webview_to_utf16(const char *s) {
-	DWORD size = MultiByteToWideChar(CP_UTF8, 0, s, -1, 0, 0);
-	WCHAR *ws = (WCHAR *)GlobalAlloc(GMEM_FIXED, sizeof(WCHAR) * size);
-	if (ws == NULL) {
-		return NULL;
-	}
-	MultiByteToWideChar(CP_UTF8, 0, s, -1, ws, size);
-	return ws;
-}
-
-static inline char *webview_from_utf16(WCHAR *ws) {
-	int n = WideCharToMultiByte(CP_UTF8, 0, ws, -1, NULL, 0, NULL, NULL);
-	char *s = (char *)GlobalAlloc(GMEM_FIXED, n);
-	if (s == NULL) {
-		return NULL;
-	}
-	WideCharToMultiByte(CP_UTF8, 0, ws, -1, s, n, NULL, NULL);
-	return s;
-}
-
-static int iid_eq(REFIID a, const IID *b) {
-	return memcmp((const void *)iid_ref(a), (const void *)b, sizeof(GUID)) == 0;
-}
 
 #if 0
 static HRESULT STDMETHODCALLTYPE JS_QueryInterface(IDispatch FAR *This,
@@ -364,6 +407,18 @@ HRESULT STDMETHODCALLTYPE WebViewClient::FilterDataObject(IDataObject * pDO, IDa
 	return S_FALSE;
 }
 
+//----------------------
+
+void WebViewEvents::HandleURL(const wchar_t * url, BOOL * cancel)
+{
+	if (wcsnicmp(url, client->oauthPrefix.c_str(), client->oauthPrefix.size()) == 0) {
+		printf("Got required URL!");
+		*cancel = true;
+	}
+}
+
+//-----------------------
+
 static const TCHAR *classname = "WebView";
 static const SAFEARRAYBOUND ArrayBound = { 1, 0 };
 
@@ -395,7 +450,12 @@ static int EmbedBrowserObject(webview_t *w)
 	client = new WebViewClient();
 	w->priv.client = client;
 
+	wchar_t * prefix = webview_to_utf16(w->oauth_callback_prefix);
+
 	client->parentWnd = w->priv.hwnd;
+	client->oauthPrefix = prefix;
+
+	GlobalFree(prefix);
 
 	if (CoGetClassObject(iid_unref(&CLSID_WebBrowser), CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, NULL, iid_unref(&IID_IClassFactory), (void **)&pClassFactory) != S_OK) {
 		goto error;
@@ -425,6 +485,19 @@ static int EmbedBrowserObject(webview_t *w)
 	}
 	if (client->browser->QueryInterface(iid_unref(&IID_IWebBrowser2), (void **)&webBrowser2) != S_OK) {
 		goto error;
+	}
+
+	IConnectionPointContainer * cpc;
+
+	HRESULT hr;
+	hr = webBrowser2->QueryInterface< IConnectionPointContainer >(&cpc);
+	if (hr == S_OK) {
+		IConnectionPoint * cp;
+		hr = cpc->FindConnectionPoint(__uuidof(DWebBrowserEvents2), &cp);
+		if (hr == S_OK) {
+			hr = cp->Advise(&client->events, &client->events.eventConnCookie);
+			client->events.client = client;
+		}
 	}
 
 	webBrowser2->put_Left(0);
@@ -595,6 +668,8 @@ static int webview_fix_ie_compat_mode() {
 }
 
 WEBVIEW_API int webview_init(webview_t *w) {
+	HRESULT hr;
+
 	WNDCLASSEX wc;
 	HINSTANCE hInstance;
 	DWORD style;
@@ -609,15 +684,20 @@ WEBVIEW_API int webview_init(webview_t *w) {
 	if (hInstance == NULL) {
 		return -1;
 	}
-	if (OleInitialize(NULL) != S_OK) {
+
+	hr = OleInitialize(NULL);
+	if (hr != S_OK && hr != S_FALSE) {
 		return -1;
 	}
-	ZeroMemory(&wc, sizeof(WNDCLASSEX));
-	wc.cbSize = sizeof(WNDCLASSEX);
-	wc.hInstance = hInstance;
-	wc.lpfnWndProc = wndproc;
-	wc.lpszClassName = classname;
-	RegisterClassEx(&wc);
+
+	if (!GetClassInfoEx(hInstance, classname, &wc)) {
+		ZeroMemory(&wc, sizeof(WNDCLASSEX));
+		wc.cbSize = sizeof(WNDCLASSEX);
+		wc.hInstance = hInstance;
+		wc.lpfnWndProc = wndproc;
+		wc.lpszClassName = classname;
+		RegisterClassEx(&wc);
+	}
 
 	style = WS_POPUP | WS_BORDER | WS_CAPTION | WS_SYSMENU;
 	if (w->resizable) {
@@ -643,7 +723,6 @@ WEBVIEW_API int webview_init(webview_t *w) {
 			rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
 			(HWND)w->parent, NULL, hInstance, (void *)w);
 	if (w->priv.hwnd == 0) {
-		OleUninitialize();
 		return -1;
 	}
 
@@ -855,12 +934,22 @@ WEBVIEW_API void webview_dialog(webview_t *w,
 			type |= MB_ICONERROR;
 			break;
 		}
-		MessageBox(w->priv.hwnd, arg, title, type);
+		MessageBoxA(w->priv.hwnd, arg, title, type);
 	}
 }
 
-WEBVIEW_API void webview_terminate(webview_t *w) { PostQuitMessage(0); }
-WEBVIEW_API void webview_exit(webview_t *w) { OleUninitialize(); }
-WEBVIEW_API void webview_print_log(const char *s) { OutputDebugString(s); }
+WEBVIEW_API void webview_terminate(webview_t *w) 
+{
+	PostQuitMessage(0);
+}
+WEBVIEW_API void webview_exit(webview_t *w) 
+{
+	if (w->priv.hwnd)DestroyWindow(w->priv.hwnd);
+}
+WEBVIEW_API void webview_print_log(const char *s) 
+{
+	OutputDebugStringA(s);
+}
 
 #endif /* WEBVIEW_WINAPI */
+

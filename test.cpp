@@ -2,6 +2,9 @@
 
 #include "webview.h"
 
+// This file is not included into the GIT repo
+#include "settings.h"
+
 webview_t mywv;
 
 HWND mainhwnd;
@@ -9,12 +12,13 @@ HWND mainhwnd;
 void CreateWebView(HWND hwnd)
 {
 	memset(&mywv, 0, sizeof(webview_t));
-	mywv.title = "Test WebView";
-	mywv.url = "https://warrobots.net";
+	mywv.title = "Login to Facebook";
+	mywv.url = SETTINGS_TEST_URL;
 	mywv.width = 500;
 	mywv.height = 500;
 	mywv.resizable = true;
 	mywv.parent = (void*)hwnd;
+	mywv.oauth_callback_prefix = "https://www.facebook.com/connect/login_success.html";
 
 	int r = webview_init(&mywv);
 }
