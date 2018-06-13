@@ -89,14 +89,14 @@ extern "C" {
 #error "Define one of: WEBVIEW_GTK, WEBVIEW_COCOA or WEBVIEW_WINAPI"
 #endif
 
-	struct webview;
+	struct webview_s;
 
-	typedef struct webview webview_t;
+	typedef struct webview_s webview_t;
 
 	typedef void(*webview_external_invoke_cb_t)(webview_t *w,
 		const char *arg);
 
-	struct webview {
+	struct webview_s {
 		void *parent;
 		const char *url;
 		const char *title;
