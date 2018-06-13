@@ -1,11 +1,14 @@
+
+# About this fork
+
+I'm interested in creating an OAuth login shell for existing WinApi and Cocoa applications. Therefore i'm not interested in js/css injects, popup dialogs and other SPA-style stuff. Instead i'm interested in URI redirect tracking, URI components capture, page contents capture and ability to run as a child window of existing message loop. Also i'm not interested in allowing end-user to reload the page with F5, show context menu for a page and other stuff. Finally closing webview, which might not be the only webview spawned, should not exit the application.
+
+Also:
+- i'm going to change the design of this library from single-file to one include file with 3 platform-specific files
+- drop mingw support
+- rename `struct webview` to `webview_t` as it confuses intellisense by sharing name with a function `webview`
+
 # webview
-
-[![Join the chat at https://gitter.im/zserge/webview](https://badges.gitter.im/zserge/webview.svg)](https://gitter.im/zserge/webview?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![Build Status](https://travis-ci.org/zserge/webview.svg?branch=master)](https://travis-ci.org/zserge/webview)
-[![Build status](https://ci.appveyor.com/api/projects/status/ksii33qx18d94h6v?svg=true)](https://ci.appveyor.com/project/zserge/webview)
-[![GoDoc](https://godoc.org/github.com/zserge/webview?status.svg)](https://godoc.org/github.com/zserge/webview)
-[![Go Report Card](https://goreportcard.com/badge/github.com/zserge/webview)](https://goreportcard.com/report/github.com/zserge/webview)
-
 
 A tiny cross-platform webview library for C/C++/Golang to build modern cross-platform GUIs. Also, there are [Rust bindings](https://github.com/Boscop/webview-rs), [Nim bindings](https://github.com/oskca/webview), and [C# bindings](https://github.com/iwillspeak/webview-cs) available.
 
