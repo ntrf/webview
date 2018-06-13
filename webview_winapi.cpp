@@ -9,29 +9,6 @@
 
 #define WM_WEBVIEW_DISPATCH (WM_APP + 1)
 
-class WvOleInPlaceFrame : public IOleInPlaceFrame
-{
-public:
-	// Inherited via IOleInPlaceFrame
-	virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void ** ppvObject) override;
-	virtual ULONG STDMETHODCALLTYPE AddRef(void) override;
-	virtual ULONG STDMETHODCALLTYPE Release(void) override;
-	virtual HRESULT STDMETHODCALLTYPE GetWindow(HWND * phwnd) override;
-	virtual HRESULT STDMETHODCALLTYPE ContextSensitiveHelp(BOOL fEnterMode) override;
-	virtual HRESULT STDMETHODCALLTYPE GetBorder(LPRECT lprectBorder) override;
-	virtual HRESULT STDMETHODCALLTYPE RequestBorderSpace(LPCBORDERWIDTHS pborderwidths) override;
-	virtual HRESULT STDMETHODCALLTYPE SetBorderSpace(LPCBORDERWIDTHS pborderwidths) override;
-	virtual HRESULT STDMETHODCALLTYPE SetActiveObject(IOleInPlaceActiveObject * pActiveObject, LPCOLESTR pszObjName) override;
-	virtual HRESULT STDMETHODCALLTYPE InsertMenus(HMENU hmenuShared, LPOLEMENUGROUPWIDTHS lpMenuWidths) override;
-	virtual HRESULT STDMETHODCALLTYPE SetMenu(HMENU hmenuShared, HOLEMENU holemenu, HWND hwndActiveObject) override;
-	virtual HRESULT STDMETHODCALLTYPE RemoveMenus(HMENU hmenuShared) override;
-	virtual HRESULT STDMETHODCALLTYPE SetStatusText(LPCOLESTR pszStatusText) override;
-	virtual HRESULT STDMETHODCALLTYPE EnableModeless(BOOL fEnable) override;
-	virtual HRESULT STDMETHODCALLTYPE TranslateAccelerator(LPMSG lpmsg, WORD wID);
-
-	HWND window;
-};
-
 struct WebViewClient : public IOleClientSite, IOleInPlaceSite, IDocHostUIHandler
 {
 public:	
@@ -78,9 +55,10 @@ public:
 	virtual HRESULT STDMETHODCALLTYPE TranslateAccelerator(LPMSG lpMsg, const GUID *pguidCmdGroup, DWORD nCmdID) override;
 
 	//IDispatch external;
-
-	WvOleInPlaceFrame frame;
+	IWebBrowser2 * webBrowser2;
 	IOleObject * browser;
+
+	HWND parentWnd;
 };
 
 
@@ -229,7 +207,7 @@ ULONG STDMETHODCALLTYPE WebViewClient::Release() {
 	return 1;
 }
 HRESULT STDMETHODCALLTYPE WebViewClient::GetWindow(HWND FAR *lphwnd) {
-	*lphwnd = this->frame.window;
+	*lphwnd = parentWnd;
 	return S_OK;
 }
 HRESULT STDMETHODCALLTYPE
@@ -249,11 +227,10 @@ WebViewClient::OnUIActivate() {
 	return S_OK;
 }
 HRESULT STDMETHODCALLTYPE WebViewClient::GetWindowContext(IOleInPlaceFrame ** ppFrame, IOleInPlaceUIWindow ** ppDoc, LPRECT lprcPosRect, LPRECT lprcClipRect, LPOLEINPLACEFRAMEINFO lpFrameInfo) {
-	auto * frame = &this->frame;
-	*ppFrame = (LPOLEINPLACEFRAME)frame;
+	*ppFrame = NULL;
 	*ppDoc = 0;
 	lpFrameInfo->fMDIApp = FALSE;
-	lpFrameInfo->hwndFrame = frame->window;
+	lpFrameInfo->hwndFrame = parentWnd;
 	lpFrameInfo->haccel = 0;
 	lpFrameInfo->cAccelEntries = 0;
 	return S_OK;
@@ -282,73 +259,21 @@ HRESULT STDMETHODCALLTYPE WebViewClient::OnPosRectChange(LPCRECT lprcPosRect) {
 	return S_OK;
 }
 
-//-----------------------
-
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::QueryInterface(REFIID riid, void ** ppvObj) {
-	return E_NOTIMPL;
-}
-ULONG STDMETHODCALLTYPE WvOleInPlaceFrame::AddRef() {
-	return 1;
-}
-ULONG STDMETHODCALLTYPE WvOleInPlaceFrame::Release() {
-	return 1;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::GetWindow(HWND * lphwnd) {
-	*lphwnd = window;
-	return S_OK;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::ContextSensitiveHelp(BOOL fEnterMode) {
-	return E_NOTIMPL;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::GetBorder(LPRECT lprectBorder) {
-	return E_NOTIMPL;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::RequestBorderSpace(LPCBORDERWIDTHS pborderwidths) {
-	return E_NOTIMPL;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::SetBorderSpace(LPCBORDERWIDTHS pborderwidths) {
-	return E_NOTIMPL;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::SetActiveObject(IOleInPlaceActiveObject *pActiveObject, LPCOLESTR pszObjName) {
-	return S_OK;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::InsertMenus(HMENU hmenuShared,
-	LPOLEMENUGROUPWIDTHS lpMenuWidths) {
-	return E_NOTIMPL;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::SetMenu(HMENU hmenuShared,
-	HOLEMENU holemenu,
-	HWND hwndActiveObject) {
-	return S_OK;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::RemoveMenus(HMENU hmenuShared) {
-	return E_NOTIMPL;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::SetStatusText(LPCOLESTR pszStatusText) {
-	return S_OK;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::EnableModeless(BOOL fEnable) {
-	return S_OK;
-}
-HRESULT STDMETHODCALLTYPE WvOleInPlaceFrame::TranslateAccelerator(LPMSG lpmsg, WORD wID) {
-	return E_NOTIMPL;
-}
-
 //----------------------
-HRESULT STDMETHODCALLTYPE WebViewClient::ShowContextMenu(DWORD dwID, POINT __RPC_FAR *ppt, 
-	IUnknown __RPC_FAR *pcmdtReserved, IDispatch __RPC_FAR *pdispReserved) {
-	return S_OK;
+HRESULT STDMETHODCALLTYPE WebViewClient::ShowContextMenu(DWORD dwID, POINT *ppt, IUnknown * pcmdtReserved, IDispatch * pdispReserved) {
+//	if (dwID == 0)
+		return S_OK;
+//	else
+//		return E_NOTIMPL;
 }
-HRESULT STDMETHODCALLTYPE WebViewClient::GetHostInfo(DOCHOSTUIINFO __RPC_FAR *pInfo) {
+HRESULT STDMETHODCALLTYPE WebViewClient::GetHostInfo(DOCHOSTUIINFO *pInfo) {
 	pInfo->cbSize = sizeof(DOCHOSTUIINFO);
 	pInfo->dwFlags = DOCHOSTUIFLAG_NO3DBORDER;
 	pInfo->dwDoubleClick = DOCHOSTUIDBLCLK_DEFAULT;
 	return S_OK;
 }
-HRESULT STDMETHODCALLTYPE WebViewClient::ShowUI(DWORD dwID,
-	IOleInPlaceActiveObject __RPC_FAR *pActiveObject,
-	IOleCommandTarget __RPC_FAR *pCommandTarget,
-	IOleInPlaceFrame __RPC_FAR *pFrame, IOleInPlaceUIWindow __RPC_FAR *pDoc) {
+HRESULT STDMETHODCALLTYPE WebViewClient::ShowUI(DWORD dwID, IOleInPlaceActiveObject * pActiveObject, IOleCommandTarget * pCommandTarget,
+	IOleInPlaceFrame * pFrame, IOleInPlaceUIWindow * pDoc) {
 	return S_OK;
 }
 HRESULT STDMETHODCALLTYPE WebViewClient::HideUI() {
@@ -401,9 +326,17 @@ static const SAFEARRAYBOUND ArrayBound = { 1, 0 };
 static void UnEmbedBrowserObject(webview_t *w) 
 {
 	if (w->priv.client != NULL) {
-		w->priv.client->browser->Close(OLECLOSE_NOSAVE);
-		w->priv.client->browser->Release();
+
+		if (w->priv.client->webBrowser2)
+			w->priv.client->webBrowser2->Release();
+
+		if (w->priv.client->browser) {
+			w->priv.client->browser->Close(OLECLOSE_NOSAVE);
+			w->priv.client->browser->Release();
+		}
+
 		delete w->priv.client;
+
 		w->priv.client = NULL;
 	}
 }
@@ -418,7 +351,7 @@ static int EmbedBrowserObject(webview_t *w)
 	client = new WebViewClient();
 	w->priv.client = client;
 
-	client->frame.window = w->priv.hwnd;
+	client->parentWnd = w->priv.hwnd;
 
 	if (CoGetClassObject(iid_unref(&CLSID_WebBrowser), CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, NULL, iid_unref(&IID_IClassFactory), (void **)&pClassFactory) != S_OK) {
 		goto error;
@@ -454,7 +387,8 @@ static int EmbedBrowserObject(webview_t *w)
 	webBrowser2->put_Top(0);
 	webBrowser2->put_Width(rect.right);
 	webBrowser2->put_Height(rect.bottom);
-	webBrowser2->Release();
+
+	client->webBrowser2 = webBrowser2;
 
 	return 0;
 error:
@@ -471,7 +405,6 @@ error:
 #define WEBVIEW_DATA_URL_PREFIX "data:text/html,"
 static int DisplayHTMLPage(webview_t *w) 
 {
-	IWebBrowser2 *webBrowser2;
 	VARIANT myURL;
 	LPDISPATCH lpDispatch;
 	IHTMLDocument2 *htmlDoc2;
@@ -480,85 +413,81 @@ static int DisplayHTMLPage(webview_t *w)
 	SAFEARRAY *sfArray;
 	VARIANT *pVar;
 
-	browserObject = w->priv.client->browser;
+	IWebBrowser2 *webBrowser2 = w->priv.client->webBrowser2;
 
 	int isDataURL = 0;
 
 	const char *webview_url = webview_check_url(w->url);
-	if (!browserObject->QueryInterface(iid_unref(&IID_IWebBrowser2), (void **)&webBrowser2)) {
-		LPCSTR webPageName;
-		isDataURL = (strncmp(webview_url, WEBVIEW_DATA_URL_PREFIX, strlen(WEBVIEW_DATA_URL_PREFIX)) == 0);
-		if (isDataURL) {
-			webPageName = "about:blank";
-		} else {
-			webPageName = (LPCSTR)webview_url;
-		}
-		VariantInit(&myURL);
-		myURL.vt = VT_BSTR;
+	LPCSTR webPageName;
+	isDataURL = (strncmp(webview_url, WEBVIEW_DATA_URL_PREFIX, strlen(WEBVIEW_DATA_URL_PREFIX)) == 0);
+	if (isDataURL) {
+		webPageName = "about:blank";
+	} else {
+		webPageName = (LPCSTR)webview_url;
+	}
+	VariantInit(&myURL);
+	myURL.vt = VT_BSTR;
 #ifndef UNICODE
-		{
-			wchar_t *buffer = webview_to_utf16(webPageName);
-			if (buffer == NULL) {
-				goto badalloc;
-			}
-			myURL.bstrVal = SysAllocString(buffer);
-			GlobalFree(buffer);
+	{
+		wchar_t *buffer = webview_to_utf16(webPageName);
+		if (buffer == NULL) {
+			goto badalloc;
 		}
+		myURL.bstrVal = SysAllocString(buffer);
+		GlobalFree(buffer);
+	}
 #else
-		myURL.bstrVal = SysAllocString(webPageName);
+	myURL.bstrVal = SysAllocString(webPageName);
 #endif
-		if (!myURL.bstrVal) {
-		badalloc:
-			webBrowser2->Release();
-			return (-6);
-		}
-		webBrowser2->Navigate2(&myURL, 0, 0, 0, 0);
-		VariantClear(&myURL);
-		if (!isDataURL) {
-			return 0;
-		}
+	if (!myURL.bstrVal) {
+	badalloc:
+		return (-6);
+	}
+	webBrowser2->Navigate2(&myURL, 0, 0, 0, 0);
+	VariantClear(&myURL);
+	if (!isDataURL) {
+		return 0;
+	}
 
-		char *url = (char *)calloc(1, strlen(webview_url) + 1);
-		char *q = url;
-		for (const char *p = webview_url + strlen(WEBVIEW_DATA_URL_PREFIX); *q = *p; p++, q++) {
-			if (*q == '%' && *(p + 1) && *(p + 2)) {
-				sscanf(p + 1, "%02x", q);
-				p = p + 2;
-			}
+	char *url = (char *)calloc(1, strlen(webview_url) + 1);
+	char *q = url;
+	for (const char *p = webview_url + strlen(WEBVIEW_DATA_URL_PREFIX); *q = *p; p++, q++) {
+		if (*q == '%' && *(p + 1) && *(p + 2)) {
+			sscanf(p + 1, "%02x", q);
+			p = p + 2;
 		}
+	}
 
-		if (webBrowser2->get_Document(&lpDispatch) == S_OK) {
-			if (lpDispatch->QueryInterface(iid_unref(&IID_IHTMLDocument2), (void **)&htmlDoc2) == S_OK) {
-				if ((sfArray = SafeArrayCreate(VT_VARIANT, 1, (SAFEARRAYBOUND *)&ArrayBound))) {
-					if (!SafeArrayAccessData(sfArray, (void **)&pVar)) {
-						pVar->vt = VT_BSTR;
+	if (webBrowser2->get_Document(&lpDispatch) == S_OK) {
+		if (lpDispatch->QueryInterface(iid_unref(&IID_IHTMLDocument2), (void **)&htmlDoc2) == S_OK) {
+			if ((sfArray = SafeArrayCreate(VT_VARIANT, 1, (SAFEARRAYBOUND *)&ArrayBound))) {
+				if (!SafeArrayAccessData(sfArray, (void **)&pVar)) {
+					pVar->vt = VT_BSTR;
 #ifndef UNICODE
-						{
-							wchar_t *buffer = webview_to_utf16(url);
-							if (buffer == NULL) {
-								goto release;
-							}
-							bstr = SysAllocString(buffer);
-							GlobalFree(buffer);
+					{
+						wchar_t *buffer = webview_to_utf16(url);
+						if (buffer == NULL) {
+							goto release;
 						}
-#else
-						bstr = SysAllocString(string);
-#endif
-
-						if ((pVar->bstrVal = bstr)) {
-							htmlDoc2->write(sfArray);
-							htmlDoc2->close();
-						}
+						bstr = SysAllocString(buffer);
+						GlobalFree(buffer);
 					}
-					SafeArrayDestroy(sfArray);
+#else
+					bstr = SysAllocString(string);
+#endif
+
+					if ((pVar->bstrVal = bstr)) {
+						htmlDoc2->write(sfArray);
+						htmlDoc2->close();
+					}
 				}
-			release:
-				free(url);
-				htmlDoc2->Release();
+				SafeArrayDestroy(sfArray);
 			}
-			lpDispatch->Release();
+		release:
+			free(url);
+			htmlDoc2->Release();
 		}
-		webBrowser2->Release();
+		lpDispatch->Release();
 		return (0);
 	}
 	return (-5);
@@ -576,14 +505,11 @@ static LRESULT CALLBACK wndproc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		return TRUE;
 	case WM_SIZE: {
 		if (w) {
-			IWebBrowser2 *webBrowser2;
-			IOleObject *browser = w->priv.client->browser;
-			if (browser->QueryInterface(iid_unref(&IID_IWebBrowser2), (void **)&webBrowser2) == S_OK) {
-				RECT rect;
-				GetClientRect(hwnd, &rect);
-				webBrowser2->put_Width(rect.right);
-				webBrowser2->put_Height(rect.bottom);
-			}
+			IWebBrowser2 *webBrowser2 = w->priv.client->webBrowser2;
+			RECT rect;
+			GetClientRect(hwnd, &rect);
+			webBrowser2->put_Width(rect.right);
+			webBrowser2->put_Height(rect.bottom);
 		}
 		return TRUE;
 	}
@@ -703,15 +629,11 @@ WEBVIEW_API int webview_loop(webview_t *w, int blocking) {
 	case WM_KEYDOWN:
 	case WM_KEYUP: {
 		HRESULT r = S_OK;
-		IWebBrowser2 *webBrowser2;
 		IOleObject *browser = w->priv.client->browser;
-		if (browser->QueryInterface(iid_unref(&IID_IWebBrowser2), (void **)&webBrowser2) == S_OK) {
-			IOleInPlaceActiveObject *pIOIPAO;
-			if (browser->QueryInterface(iid_unref(&IID_IOleInPlaceActiveObject), (void **)&pIOIPAO) == S_OK) {
-				r = pIOIPAO->TranslateAccelerator(&msg);
-				pIOIPAO->Release();
-			}
-			webBrowser2->Release();
+		IOleInPlaceActiveObject *pIOIPAO;
+		if (browser->QueryInterface(iid_unref(&IID_IOleInPlaceActiveObject), (void **)&pIOIPAO) == S_OK) {
+			r = pIOIPAO->TranslateAccelerator(&msg);
+			pIOIPAO->Release();
 		}
 		if (r != S_FALSE) {
 			break;
@@ -725,14 +647,11 @@ WEBVIEW_API int webview_loop(webview_t *w, int blocking) {
 }
 
 WEBVIEW_API int webview_eval(webview_t *w, const char *js) {
-	IWebBrowser2 *webBrowser2;
 	IHTMLDocument2 *htmlDoc2;
 	IDispatch *docDispatch;
 	IDispatch *scriptDispatch;
-	if (w->priv.client->browser->QueryInterface(iid_unref(&IID_IWebBrowser2), (void **)&webBrowser2) != S_OK) {
-		return -1;
-	}
 
+	IWebBrowser2 *webBrowser2 = w->priv.client->webBrowser2;
 	if (webBrowser2->get_Document(&docDispatch) != S_OK) {
 		return -1;
 	}
