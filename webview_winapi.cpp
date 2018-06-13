@@ -1,13 +1,57 @@
-#include <webview.h>
+#include "webview.h"
 
 
 #if defined(WEBVIEW_WINAPI)
+
+#include <commctrl.h>
+#include <exdisp.h>
+#include <mshtmhst.h>
+#include <mshtml.h>
+#include <shobjidl.h>
+#include <ExDispid.h>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 
 #define WM_WEBVIEW_DISPATCH (WM_APP + 1)
+
+struct WebViewEvents : public DWebBrowserEvents2
+{
+	// Inherited via DWebBrowserEvents2
+	virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void ** ppvObject) override
+	{
+		return E_NOTIMPL;
+	}
+	virtual ULONG STDMETHODCALLTYPE AddRef(void) override
+	{
+		return 1;
+	}
+	virtual ULONG STDMETHODCALLTYPE Release(void) override
+	{
+		return 1;
+	}
+	virtual HRESULT STDMETHODCALLTYPE GetTypeInfoCount(UINT * pctinfo) override
+	{
+		return E_NOTIMPL;
+	}
+	virtual HRESULT STDMETHODCALLTYPE GetTypeInfo(UINT iTInfo, LCID lcid, ITypeInfo ** ppTInfo) override
+	{
+		return E_NOTIMPL;
+	}
+	virtual HRESULT STDMETHODCALLTYPE GetIDsOfNames(REFIID riid, LPOLESTR * rgszNames, UINT cNames, LCID lcid, DISPID * rgDispId) override
+	{
+		return E_NOTIMPL;
+	}
+	virtual HRESULT STDMETHODCALLTYPE Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS * pDispParams, VARIANT * pVarResult, EXCEPINFO * pExcepInfo, UINT * puArgErr) override
+	{
+		switch (dispIdMember) {
+		case DISPID_BEFORENAVIGATE2:
+			break;
+		}
+		return S_OK;
+	}
+};
 
 struct WebViewClient : public IOleClientSite, IOleInPlaceSite, IDocHostUIHandler
 {
@@ -409,7 +453,6 @@ static int DisplayHTMLPage(webview_t *w)
 	LPDISPATCH lpDispatch;
 	IHTMLDocument2 *htmlDoc2;
 	BSTR bstr;
-	IOleObject *browserObject;
 	SAFEARRAY *sfArray;
 	VARIANT *pVar;
 
@@ -453,7 +496,9 @@ static int DisplayHTMLPage(webview_t *w)
 	char *q = url;
 	for (const char *p = webview_url + strlen(WEBVIEW_DATA_URL_PREFIX); *q = *p; p++, q++) {
 		if (*q == '%' && *(p + 1) && *(p + 2)) {
-			sscanf(p + 1, "%02x", q);
+			int r;
+			sscanf(p + 1, "%02x", &r);
+			*q = (char)r;
 			p = p + 2;
 		}
 	}
