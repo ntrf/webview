@@ -17,6 +17,7 @@
 #pragma comment(lib, "oleaut32.lib")
 
 #define WM_WEBVIEW_DISPATCH (WM_APP + 1)
+#define WM_WEBVIEW_KEYSTROKE (WM_APP + 2)
 
 
 #ifdef __cplusplus
@@ -177,6 +178,8 @@ public:
 
 	HWND parentWnd;
 
+	IOleInPlaceActiveObject * activeObject;
+
 	WebViewEvents events;
 };
 
@@ -249,6 +252,8 @@ static IDispatchVtbl ExternalDispatchTable = {
 	JS_GetTypeInfo,    JS_GetIDsOfNames, JS_Invoke };
 #endif
 
+//-----------------------
+
 HRESULT STDMETHODCALLTYPE WebViewClient::SaveObject() {
 	return E_NOTIMPL;
 }
@@ -314,7 +319,7 @@ WebViewClient::OnUIActivate() {
 	return S_OK;
 }
 HRESULT STDMETHODCALLTYPE WebViewClient::GetWindowContext(IOleInPlaceFrame ** ppFrame, IOleInPlaceUIWindow ** ppDoc, LPRECT lprcPosRect, LPRECT lprcClipRect, LPOLEINPLACEFRAMEINFO lpFrameInfo) {
-	*ppFrame = NULL;
+	*ppFrame = 0;
 	*ppDoc = 0;
 	lpFrameInfo->fMDIApp = FALSE;
 	lpFrameInfo->hwndFrame = parentWnd;
@@ -425,6 +430,8 @@ static const SAFEARRAYBOUND ArrayBound = { 1, 0 };
 static void UnEmbedBrowserObject(webview_t *w) 
 {
 	if (w->priv.client != NULL) {
+		if (w->priv.client->activeObject)
+			w->priv.client->activeObject->Release();
 
 		if (w->priv.client->webBrowser2)
 			w->priv.client->webBrowser2->Release();
@@ -457,7 +464,7 @@ static int EmbedBrowserObject(webview_t *w)
 
 	GlobalFree(prefix);
 
-	if (CoGetClassObject(iid_unref(&CLSID_WebBrowser), CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, NULL, iid_unref(&IID_IClassFactory), (void **)&pClassFactory) != S_OK) {
+	if (CoGetClassObject(__uuidof(WebBrowser), CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, NULL, __uuidof(IClassFactory), (void **)&pClassFactory) != S_OK) {
 		goto error;
 	}
 
@@ -475,6 +482,9 @@ static int EmbedBrowserObject(webview_t *w)
 	client->browser->SetHostNames(L"My Host Name", 0);
 
 	if (OleSetContainedObject((struct IUnknown *)client->browser, TRUE) != S_OK) {
+		goto error;
+	}
+	if (client->browser->QueryInterface(iid_unref(&IID_IOleInPlaceActiveObject), (void **)&(client->activeObject)) != S_OK) {
 		goto error;
 	}
 	GetClientRect(w->priv.hwnd, &rect);
@@ -611,12 +621,37 @@ static int DisplayHTMLPage(webview_t *w)
 	return (-5);
 }
 
+static HHOOK msghook = NULL;
+
+static LRESULT CALLBACK GetMsgHookProc(int code, WPARAM wparam, LPARAM lparam)
+{
+	MSG & msg = *(MSG*)lparam;
+
+	if (code >= 0) {
+		if (msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) {
+			auto parent = GetForegroundWindow();
+			HRESULT r = (HRESULT)SendMessageW(parent, WM_WEBVIEW_KEYSTROKE, wparam, lparam);
+
+			if (r != S_FALSE)
+				ZeroMemory(&msg, sizeof(MSG));
+		}
+	}
+
+	return CallNextHookEx(NULL, code, wparam, lparam);
+}
+
 static LRESULT CALLBACK wndproc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	webview_t *w = (webview_t *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 	switch (uMsg) {
 	case WM_CREATE:
 		w = (webview_t *)((CREATESTRUCT *)lParam)->lpCreateParams;
 		w->priv.hwnd = hwnd;
+
+		// Set static message hook to capture all the key events. MS didn't make this easy at all.
+		if (msghook == NULL) {
+			msghook = SetWindowsHookExW(WH_GETMESSAGE, &GetMsgHookProc, NULL, GetCurrentThreadId());
+		}
+
 		return EmbedBrowserObject(w);
 	case WM_DESTROY:
 		UnEmbedBrowserObject(w);
@@ -636,6 +671,14 @@ static LRESULT CALLBACK wndproc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		void *arg = (void *)lParam;
 		(*f)(w, arg);
 		return TRUE;
+	}
+	case WM_WEBVIEW_KEYSTROKE:
+	{
+		HRESULT r = S_OK;
+		
+		IOleInPlaceActiveObject *ao = w->priv.client->activeObject;
+		r = ao->TranslateAccelerator((MSG*)lParam);
+		return r;
 	}
 	}
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -952,4 +995,3 @@ WEBVIEW_API void webview_print_log(const char *s)
 }
 
 #endif /* WEBVIEW_WINAPI */
-
